@@ -7,4 +7,5 @@ public class AIConfig : ScriptableObject
     public float acceleration;
     public AIObstacleIntelligence aIObstacleIntelligence;
     public LaneSide startLane;
+    public string aiName;
 }

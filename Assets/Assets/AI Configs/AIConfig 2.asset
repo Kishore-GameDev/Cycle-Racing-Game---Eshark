@@ -10,9 +10,10 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e711cf083b0d88240a82cdd3b43e6342, type: 3}
-  m_Name: Maanikam AIConfig
+  m_Name: AIConfig 2
   m_EditorClassIdentifier: Assembly-CSharp::AIConfig
-  maxSpeed: 80
-  acceleration: 20
-  aIObstacleIntelligence: 0
+  maxSpeed: 45
+  acceleration: 15
+  aIObstacleIntelligence: 1
   startLane: 0
+  aiName: AI 2

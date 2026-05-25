@@ -10,5 +10,16 @@ public class ObstacleDetector : MonoBehaviour
         {
             aIController.DetectedObstacle(ObstacleType.Oil);
         }
+        else if (other.gameObject.CompareTag("Mud"))
+        {
+            aIController.DetectedObstacle(ObstacleType.Mud);
+        }
+        else if (other.gameObject.CompareTag("Barr") && other.gameObject.TryGetComponent(out Barricade comp))
+        {
+            if (comp.IsActive())
+            {
+                aIController.DetectedObstacle(ObstacleType.Barricade);
+            }
+        }
     }
 }

@@ -11,6 +11,7 @@ public enum AIState
     Won,
     Defeated,
     CrashedOilObstacle,
+    CrashedMudObstacle,
     CrashedBarricadeObstacle,
 }
 
@@ -23,22 +24,35 @@ public enum AIObstacleIntelligence
 
 public class AIController : MonoBehaviour
 {
-    private static WaitForSeconds _waitForSeconds1 = new WaitForSeconds(1f);
     [SerializeField] private AnimationController animationController;
     [SerializeField] private SplineFollower splineFollower;
     [SerializeField] private AIConfig aIConfig;
+    [SerializeField] private float startDistance;
 
     private AIState aiState;
     private float currentSpeed;
     private MinMax laneOffset = new(-3.5f, 3.5f);
     private LaneSide currentLane;
-    private readonly float laneSwitchSpeed = 25f;
+    private readonly float laneSwitchSpeed = 18f;
+    private float maxSpeed;
+    private float acceleration;
     private Coroutine laneSwitchRoutine = null;
     private Coroutine oilCrashRoutine = null;
+    private Coroutine mudCrashRoutine = null;
+    private Coroutine barricadeCrashRoutine = null;
+    private float currentRaceCompletePercent;
+    private bool alreadyStoppedRace = false;
+    private bool registeredRaceComplete = true;
 
     void Start()
     {
+        GameManager.StartRace += StartRace;
+        GameManager.StopRace += StopRace;
+        GameManager.ResetAll += ResetAll;
+
         currentLane = aIConfig.startLane;
+        maxSpeed = aIConfig.maxSpeed;
+        acceleration = aIConfig.acceleration;
         splineFollower.motion.offset = new(currentLane == LaneSide.Left ? laneOffset.min : laneOffset.max, 0);
         aiState = AIState.Idle;
     }
@@ -46,6 +60,51 @@ public class AIController : MonoBehaviour
     void Update()
     {
         ContinuesUpdateState();
+        if (!registeredRaceComplete && splineFollower.result.percent * 100f >= currentRaceCompletePercent)
+        {
+            registeredRaceComplete = true;
+            bool isFirst = GameManager.Instance.DidAnyoneWonRace();
+            GameManager.Instance.RaceCompletedRegister(false, aIConfig.aiName);
+
+            StopRace(false);
+            if (isFirst)
+            {
+                UpdateState(AIState.Won);
+            }
+        }
+    }
+
+    private void StartRace(float raceCompletePercent)
+    {
+        registeredRaceComplete = false;
+        currentRaceCompletePercent = raceCompletePercent;
+        UpdateState(AIState.Move);
+    }
+
+    private void StopRace(bool isPlayerWon)
+    {
+        if (alreadyStoppedRace) return;
+
+        alreadyStoppedRace = true;
+        if (laneSwitchRoutine != null)
+        {
+            StopCoroutine(laneSwitchRoutine);
+        }
+        if (oilCrashRoutine != null)
+        {
+            StopCoroutine(oilCrashRoutine);
+        }
+        if (mudCrashRoutine != null)
+        {
+            StopCoroutine(mudCrashRoutine);
+        }
+        if (barricadeCrashRoutine != null)
+        {
+            StopCoroutine(barricadeCrashRoutine);
+        }
+
+        UpdateState(AIState.Idle);
+        currentSpeed = 0f;
     }
 
     private void UpdateState(AIState _aiState)
@@ -68,11 +127,26 @@ public class AIController : MonoBehaviour
                 Move();
                 break;
 
+            case AIState.Won:
+                animationController.UpdateCycleAnimState(CycleAnimState.Celebration);
+                break;
+
             case AIState.CrashedOilObstacle:
-                if (oilCrashRoutine != null)
-                    StopCoroutine(oilCrashRoutine);
+                ResetOilCrashRoutine();
 
                 oilCrashRoutine = StartCoroutine(OilCrash());
+                break;
+
+            case AIState.CrashedMudObstacle:
+                ResetMudCrashRoutine();
+
+                mudCrashRoutine = StartCoroutine(MudCrash());
+                break;
+            
+            case AIState.CrashedBarricadeObstacle:
+                ResetBarricadeCrashRoutine();
+
+                barricadeCrashRoutine = StartCoroutine(BarricadeCrash());
                 break;
         }
     }
@@ -89,17 +163,17 @@ public class AIController : MonoBehaviour
 
     private void Move()
     {
-        float targetSpeed = aIConfig.maxSpeed;
+        float targetSpeed = maxSpeed;
 
         currentSpeed = Mathf.MoveTowards(
             currentSpeed,
             targetSpeed,
-            aIConfig.acceleration * Time.deltaTime
+            acceleration * Time.deltaTime
         );
 
         splineFollower.followSpeed = currentSpeed;
 
-        animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / aIConfig.maxSpeed);
+        animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
     }
 
     public void CrashOnObstacle(ObstacleType obstacleType)
@@ -110,7 +184,12 @@ public class AIController : MonoBehaviour
                 UpdateState(AIState.CrashedOilObstacle);
                 break;
 
+            case ObstacleType.Mud:
+                UpdateState(AIState.CrashedMudObstacle);
+                break;
+
             case ObstacleType.Barricade:
+                UpdateState(AIState.CrashedBarricadeObstacle);
                 break;
         }
     }
@@ -134,7 +213,6 @@ public class AIController : MonoBehaviour
 
     private IEnumerator SwitchLane()
     {
-        Debug.Log("Switching");
         currentLane =
             currentLane == LaneSide.Left
                 ? LaneSide.Right
@@ -184,9 +262,54 @@ public class AIController : MonoBehaviour
             yield return null;
         }
 
-        yield return _waitForSeconds1;
+        yield return new WaitForSeconds(1f);
 
         UpdateState(AIState.Move);
+    }
+
+    private void ResetOilCrashRoutine()
+    {
+        if (oilCrashRoutine != null)
+        {
+            StopCoroutine(oilCrashRoutine);
+            UpdateState(AIState.Move);
+        }
+    }
+
+    private IEnumerator MudCrash()
+    {
+        splineFollower.followSpeed = 15f;
+        if (currentSpeed > maxSpeed) currentSpeed = maxSpeed;
+        yield return new WaitForSeconds(5f);
+
+        UpdateState(AIState.Move);
+    }
+
+    private void ResetMudCrashRoutine()
+    {
+        if (mudCrashRoutine != null)
+        {
+            StopCoroutine(mudCrashRoutine);
+        }
+    }
+
+    private IEnumerator BarricadeCrash()
+    {
+        UpdateState(AIState.Idle);
+        currentSpeed = 0f;
+
+        yield return new WaitForSeconds(3.5f);
+
+        UpdateState(AIState.Move);
+    }
+
+    private void ResetBarricadeCrashRoutine()
+    {
+        if (barricadeCrashRoutine != null)
+        {
+            StopCoroutine(barricadeCrashRoutine);
+            UpdateState(AIState.Move);
+        }
     }
 
     void OnTriggerEnter(Collider other)
@@ -195,6 +318,59 @@ public class AIController : MonoBehaviour
         {
             CrashOnObstacle(ObstacleType.Oil);
         }
+        else if (other.gameObject.CompareTag("Mud"))
+        {
+            CrashOnObstacle(ObstacleType.Mud);
+        }
+        else if (other.gameObject.CompareTag("Barr") && other.gameObject.TryGetComponent(out Barricade comp))
+        {
+            if (comp.IsActive())
+            {
+                CrashOnObstacle(ObstacleType.Barricade);
+                comp.DestroyBarricade();
+            }
+        }
+    }
+
+    private void ResetAll()
+    {
+        if (laneSwitchRoutine != null)
+        {
+            StopCoroutine(laneSwitchRoutine);
+        }
+        if (oilCrashRoutine != null)
+        {
+            StopCoroutine(oilCrashRoutine);
+        }
+        if (mudCrashRoutine != null)
+        {
+            StopCoroutine(mudCrashRoutine);
+        }
+        if (barricadeCrashRoutine != null)
+        {
+            StopCoroutine(barricadeCrashRoutine);
+        }
+
+        UpdateState(AIState.Idle);
+        alreadyStoppedRace = false;
+        currentSpeed = 0f;
+        maxSpeed = aIConfig.maxSpeed;
+        acceleration = aIConfig.acceleration;
+        currentLane = aIConfig.startLane;
+
+        splineFollower.motion.offset = new(currentLane == LaneSide.Left ? laneOffset.min : laneOffset.max, 0);
+        splineFollower.followSpeed = 0f;
+
+        splineFollower.SetDistance(startDistance);
+        splineFollower.RebuildImmediate();
+        splineFollower.Evaluate(0f);
+    }
+
+    void OnDestroy()
+    {
+        GameManager.StartRace -= StartRace;
+        GameManager.StopRace -= StopRace;
+        GameManager.ResetAll -= ResetAll;
     }
 
     #region Test
