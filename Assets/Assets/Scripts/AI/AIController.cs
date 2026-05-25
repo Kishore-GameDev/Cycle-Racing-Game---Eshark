@@ -9,7 +9,6 @@ public enum AIState
     Idle,
     Move,
     Won,
-    Defeated,
     CrashedOilObstacle,
     CrashedMudObstacle,
     CrashedBarricadeObstacle,
@@ -22,152 +21,225 @@ public enum AIObstacleIntelligence
     Smart,
 }
 
-public class AIController : MonoBehaviour
+public class AIController : RacerControllerBase
 {
+    [Header("References")]
     [SerializeField] private AnimationController animationController;
     [SerializeField] private SplineFollower splineFollower;
     [SerializeField] private AIConfig aIConfig;
+
+    [Header("Settings")]
     [SerializeField] private float startDistance;
 
+
+    private readonly MinMax laneOffset = new(-3.5f, 3.5f);
+
     private AIState aiState;
-    private float currentSpeed;
-    private MinMax laneOffset = new(-3.5f, 3.5f);
+
     private LaneSide currentLane;
-    private readonly float laneSwitchSpeed = 18f;
+
+    private Coroutine laneSwitchRoutine;
+    private Coroutine oilCrashRoutine;
+    private Coroutine mudCrashRoutine;
+    private Coroutine barricadeCrashRoutine;
+
+    private float currentSpeed;
     private float maxSpeed;
     private float acceleration;
-    private Coroutine laneSwitchRoutine = null;
-    private Coroutine oilCrashRoutine = null;
-    private Coroutine mudCrashRoutine = null;
-    private Coroutine barricadeCrashRoutine = null;
+
     private float currentRaceCompletePercent;
-    private bool alreadyStoppedRace = false;
+
+    private const float laneSwitchSpeed = 18f;
+
+    private bool alreadyStoppedRace;
     private bool registeredRaceComplete = true;
 
-    void Start()
+    private float CurrentLaneOffset =>
+        currentLane == LaneSide.Left
+            ? laneOffset.min
+            : laneOffset.max;
+
+    private void Start()
+    {
+        SubscribeEvents();
+        Initialize();
+    }
+
+    private void Update()
+    {
+        if (aiState == AIState.Move)
+        {
+            Move();
+        }
+
+        CheckRaceComplete();
+    }
+
+    private void Initialize()
+    {
+        currentLane = aIConfig.startLane;
+
+        maxSpeed = aIConfig.maxSpeed;
+        acceleration = aIConfig.acceleration;
+
+        splineFollower.motion.offset =
+            new Vector2(CurrentLaneOffset, 0f);
+
+        splineFollower.followSpeed = 0f;
+
+        currentSpeed = 0f;
+
+        aiState = AIState.Idle;
+    }
+
+    #region Events
+    private void SubscribeEvents()
     {
         GameManager.StartRace += StartRace;
         GameManager.StopRace += StopRace;
         GameManager.ResetAll += ResetAll;
-
-        currentLane = aIConfig.startLane;
-        maxSpeed = aIConfig.maxSpeed;
-        acceleration = aIConfig.acceleration;
-        splineFollower.motion.offset = new(currentLane == LaneSide.Left ? laneOffset.min : laneOffset.max, 0);
-        aiState = AIState.Idle;
     }
 
-    void Update()
+    private void UnsubscribeEvents()
     {
-        ContinuesUpdateState();
-        if (!registeredRaceComplete && splineFollower.result.percent * 100f >= currentRaceCompletePercent)
-        {
-            registeredRaceComplete = true;
-            bool isFirst = GameManager.Instance.DidAnyoneWonRace();
-            GameManager.Instance.RaceCompletedRegister(false, aIConfig.aiName);
-
-            StopRace(false);
-            if (isFirst)
-            {
-                UpdateState(AIState.Won);
-            }
-        }
+        GameManager.StartRace -= StartRace;
+        GameManager.StopRace -= StopRace;
+        GameManager.ResetAll -= ResetAll;
     }
+    #endregion
 
+    #region Race
     private void StartRace(float raceCompletePercent)
     {
+        alreadyStoppedRace = false;
+
         registeredRaceComplete = false;
+
         currentRaceCompletePercent = raceCompletePercent;
+
         UpdateState(AIState.Move);
     }
 
     private void StopRace(bool isPlayerWon)
     {
-        if (alreadyStoppedRace) return;
+        if (alreadyStoppedRace)
+            return;
 
         alreadyStoppedRace = true;
-        if (laneSwitchRoutine != null)
-        {
-            StopCoroutine(laneSwitchRoutine);
-        }
-        if (oilCrashRoutine != null)
-        {
-            StopCoroutine(oilCrashRoutine);
-        }
-        if (mudCrashRoutine != null)
-        {
-            StopCoroutine(mudCrashRoutine);
-        }
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-        }
+
+        ResetCoroutines();
+
+        currentSpeed = 0f;
 
         UpdateState(AIState.Idle);
-        currentSpeed = 0f;
     }
 
-    private void UpdateState(AIState _aiState)
+    private void CheckRaceComplete()
     {
-        if (aiState == _aiState)
-        {
+        if (registeredRaceComplete)
             return;
-        }
 
-        aiState = _aiState;
+        if (splineFollower.result.percent * 100f < currentRaceCompletePercent)
+            return;
+
+        registeredRaceComplete = true;
+
+        bool isFirst = GameManager.Instance.DidAnyoneWonRace();
+
+        GameManager.Instance.RaceCompletedRegister(
+            false,
+            aIConfig.aiName
+        );
+
+        StopRace(false);
+
+        if (isFirst)
+        {
+            UpdateState(AIState.Won);
+        }
+    }
+    #endregion
+
+    #region States
+    private void UpdateState(AIState newState)
+    {
+        if (aiState == newState)
+            return;
+
+        aiState = newState;
 
         switch (aiState)
         {
             case AIState.Idle:
-                animationController.UpdateCycleAnimState(CycleAnimState.Idle);
-                splineFollower.followSpeed = 0f;
+                EnterIdleState();
                 break;
 
             case AIState.Move:
-                Move();
+                EnterMoveState();
                 break;
 
             case AIState.Won:
-                animationController.UpdateCycleAnimState(CycleAnimState.Celebration);
+                EnterWonState();
                 break;
 
             case AIState.CrashedOilObstacle:
-                ResetOilCrashRoutine();
-
-                oilCrashRoutine = StartCoroutine(OilCrash());
+                EnterOilCrashState();
                 break;
 
             case AIState.CrashedMudObstacle:
-                ResetMudCrashRoutine();
-
-                mudCrashRoutine = StartCoroutine(MudCrash());
+                EnterMudCrashState();
                 break;
-            
+
             case AIState.CrashedBarricadeObstacle:
-                ResetBarricadeCrashRoutine();
-
-                barricadeCrashRoutine = StartCoroutine(BarricadeCrash());
+                EnterBarricadeCrashState();
                 break;
         }
     }
 
-    private void ContinuesUpdateState()
+    private void EnterIdleState()
     {
-        switch (aiState)
-        {
-            case AIState.Move:
-                Move();
-                break;
-        }
+        splineFollower.followSpeed = 0f;
+
+        animationController.UpdateCycleAnimState(CycleAnimState.Idle);
     }
+
+    private void EnterMoveState()
+    {
+        Move();
+    }
+
+    private void EnterWonState()
+    {
+        animationController.UpdateCycleAnimState(CycleAnimState.Celebration);
+    }
+
+    private void EnterOilCrashState()
+    {
+        StopRoutine(ref oilCrashRoutine);
+
+        oilCrashRoutine = StartCoroutine(OilCrash());
+    }
+
+    private void EnterMudCrashState()
+    {
+        StopRoutine(ref mudCrashRoutine);
+
+        mudCrashRoutine = StartCoroutine(MudCrash());
+    }
+
+    private void EnterBarricadeCrashState()
+    {
+        StopRoutine(ref barricadeCrashRoutine);
+
+        barricadeCrashRoutine = StartCoroutine(BarricadeCrash());
+    }
+    #endregion
 
     private void Move()
     {
-        float targetSpeed = maxSpeed;
-
         currentSpeed = Mathf.MoveTowards(
             currentSpeed,
-            targetSpeed,
+            maxSpeed,
             acceleration * Time.deltaTime
         );
 
@@ -176,8 +248,12 @@ public class AIController : MonoBehaviour
         animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
     }
 
+    #region Obstacles
     public void CrashOnObstacle(ObstacleType obstacleType)
     {
+        if (aiState == AIState.Won)
+            return;
+
         switch (obstacleType)
         {
             case ObstacleType.Oil:
@@ -196,19 +272,26 @@ public class AIController : MonoBehaviour
 
     public void DetectedObstacle(ObstacleType obstacleType)
     {
-        AIObstacleIntelligence intelligence = aIConfig.aIObstacleIntelligence;
-        if (aIConfig.aIObstacleIntelligence == AIObstacleIntelligence.Confused)
+        if (aiState == AIState.Won)
+            return;
+
+        AIObstacleIntelligence intelligence =
+            aIConfig.aIObstacleIntelligence;
+
+        if (intelligence == AIObstacleIntelligence.Confused)
         {
-            intelligence = Random.value < 0.5f ? AIObstacleIntelligence.Dumb : AIObstacleIntelligence.Smart;
+            intelligence =
+                Random.value < 0.5f
+                    ? AIObstacleIntelligence.Dumb
+                    : AIObstacleIntelligence.Smart;
         }
 
-        if (intelligence == AIObstacleIntelligence.Smart)
-        {
-            if (laneSwitchRoutine != null)
-                StopCoroutine(laneSwitchRoutine);
+        if (intelligence != AIObstacleIntelligence.Smart)
+            return;
 
-            laneSwitchRoutine = StartCoroutine(SwitchLane());
-        }
+        StopRoutine(ref laneSwitchRoutine);
+
+        laneSwitchRoutine = StartCoroutine(SwitchLane());
     }
 
     private IEnumerator SwitchLane()
@@ -218,10 +301,7 @@ public class AIController : MonoBehaviour
                 ? LaneSide.Right
                 : LaneSide.Left;
 
-        float targetLane =
-            currentLane == LaneSide.Left
-                ? laneOffset.min
-                : laneOffset.max;
+        float targetLane = CurrentLaneOffset;
 
         while (Mathf.Abs(splineFollower.motion.offset.x - targetLane) > 0.01f)
         {
@@ -238,22 +318,25 @@ public class AIController : MonoBehaviour
             yield return null;
         }
 
-        Vector2 finalOffset = splineFollower.motion.offset;
-        finalOffset.x = targetLane;
-        splineFollower.motion.offset = finalOffset;
+        splineFollower.motion.offset =
+            new Vector2(targetLane, 0f);
+
+        laneSwitchRoutine = null;
     }
 
     private IEnumerator OilCrash()
     {
         float deceleration = currentSpeed * 0.9f;
-        animationController.UpdateCycleAnimState(CycleAnimState.OilCrash);
+
+        animationController.UpdateCycleAnimState(
+            CycleAnimState.OilCrash
+        );
+
         while (currentSpeed > 0.01f)
         {
-            float targetSpeed = 0;
-
             currentSpeed = Mathf.MoveTowards(
                 currentSpeed,
-                targetSpeed,
+                0f,
                 deceleration * Time.deltaTime
             );
 
@@ -264,119 +347,131 @@ public class AIController : MonoBehaviour
 
         yield return new WaitForSeconds(1f);
 
-        UpdateState(AIState.Move);
-    }
+        oilCrashRoutine = null;
 
-    private void ResetOilCrashRoutine()
-    {
-        if (oilCrashRoutine != null)
-        {
-            StopCoroutine(oilCrashRoutine);
-            UpdateState(AIState.Move);
-        }
+        UpdateState(AIState.Move);
     }
 
     private IEnumerator MudCrash()
     {
         splineFollower.followSpeed = 15f;
-        if (currentSpeed > maxSpeed) currentSpeed = maxSpeed;
+
+        if (currentSpeed > maxSpeed)
+        {
+            currentSpeed = maxSpeed;
+        }
+
         yield return new WaitForSeconds(5f);
 
-        UpdateState(AIState.Move);
-    }
+        mudCrashRoutine = null;
 
-    private void ResetMudCrashRoutine()
-    {
-        if (mudCrashRoutine != null)
-        {
-            StopCoroutine(mudCrashRoutine);
-        }
+        UpdateState(AIState.Move);
     }
 
     private IEnumerator BarricadeCrash()
     {
-        UpdateState(AIState.Idle);
         currentSpeed = 0f;
+
+        UpdateState(AIState.Idle);
 
         yield return new WaitForSeconds(3.5f);
 
+        barricadeCrashRoutine = null;
+
         UpdateState(AIState.Move);
     }
+    #endregion
 
-    private void ResetBarricadeCrashRoutine()
+    #region Coroutines & Reset
+    private void ResetCoroutines()
     {
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-            UpdateState(AIState.Move);
-        }
+        StopRoutine(ref laneSwitchRoutine);
+        StopRoutine(ref oilCrashRoutine);
+        StopRoutine(ref mudCrashRoutine);
+        StopRoutine(ref barricadeCrashRoutine);
     }
 
-    void OnTriggerEnter(Collider other)
+    private void StopRoutine(ref Coroutine routine)
     {
-        if (other.gameObject.CompareTag("Oil"))
-        {
-            CrashOnObstacle(ObstacleType.Oil);
-        }
-        else if (other.gameObject.CompareTag("Mud"))
-        {
-            CrashOnObstacle(ObstacleType.Mud);
-        }
-        else if (other.gameObject.CompareTag("Barr") && other.gameObject.TryGetComponent(out Barricade comp))
-        {
-            if (comp.IsActive())
-            {
-                CrashOnObstacle(ObstacleType.Barricade);
-                comp.DestroyBarricade();
-            }
-        }
+        if (routine == null)
+            return;
+
+        StopCoroutine(routine);
+
+        routine = null;
     }
 
     private void ResetAll()
     {
-        if (laneSwitchRoutine != null)
-        {
-            StopCoroutine(laneSwitchRoutine);
-        }
-        if (oilCrashRoutine != null)
-        {
-            StopCoroutine(oilCrashRoutine);
-        }
-        if (mudCrashRoutine != null)
-        {
-            StopCoroutine(mudCrashRoutine);
-        }
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-        }
+        ResetCoroutines();
 
-        UpdateState(AIState.Idle);
-        alreadyStoppedRace = false;
         currentSpeed = 0f;
-        maxSpeed = aIConfig.maxSpeed;
-        acceleration = aIConfig.acceleration;
+
+        alreadyStoppedRace = false;
+        registeredRaceComplete = true;
+
         currentLane = aIConfig.startLane;
 
-        splineFollower.motion.offset = new(currentLane == LaneSide.Left ? laneOffset.min : laneOffset.max, 0);
+        maxSpeed = aIConfig.maxSpeed;
+        acceleration = aIConfig.acceleration;
+
+        splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
+
         splineFollower.followSpeed = 0f;
 
         splineFollower.SetDistance(startDistance);
+
         splineFollower.RebuildImmediate();
+
         splineFollower.Evaluate(0f);
+
+        UpdateState(AIState.Idle);
+    }
+    #endregion
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Oil"))
+        {
+            CrashOnObstacle(ObstacleType.Oil);
+
+            return;
+        }
+
+        if (other.CompareTag("Mud"))
+        {
+            CrashOnObstacle(ObstacleType.Mud);
+
+            return;
+        }
+
+        if (!other.CompareTag("Barr"))
+            return;
+
+        if (!other.TryGetComponent(out Barricade barricade))
+            return;
+
+        if (!barricade.IsActive())
+            return;
+
+        CrashOnObstacle(ObstacleType.Barricade);
+
+        barricade.DestroyBarricade();
     }
 
-    void OnDestroy()
+    private void OnDestroy()
     {
-        GameManager.StartRace -= StartRace;
-        GameManager.StopRace -= StopRace;
-        GameManager.ResetAll -= ResetAll;
+        UnsubscribeEvents();
     }
 
     #region Test
     [Header("Testing")]
-    [OnValueChange(nameof(TestUpdateState))][SerializeField] private AIState TestAIState;
+    [OnValueChange(nameof(TestUpdateState))]
+    [SerializeField] private AIState testAIState;
 
-    public void TestUpdateState() => UpdateState(TestAIState);
+    private void TestUpdateState()
+    {
+        UpdateState(testAIState);
+    }
     #endregion
 }

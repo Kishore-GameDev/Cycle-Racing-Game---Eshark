@@ -2,36 +2,65 @@ using UnityEngine;
 
 public class Barricade : MonoBehaviour
 {
-    [SerializeField] private ParticleSystem VFX;
+    [Header("References")]
+    [SerializeField] private ParticleSystem vfx;
     [SerializeField] private GameObject visualObject;
 
-    private bool alreadyDestroyed = false;
+    private bool alreadyDestroyed;
 
-    void Start()
+    private void Start()
+    {
+        SubscribeEvents();
+    }
+
+    private void SubscribeEvents()
     {
         GameManager.ResetAll += ResetAll;
     }
 
-    public bool IsActive() => !alreadyDestroyed;
-    
+    private void UnsubscribeEvents()
+    {
+        GameManager.ResetAll -= ResetAll;
+    }
+
+    public bool IsActive()
+    {
+        return !alreadyDestroyed;
+    }
+
     public void DestroyBarricade()
     {
-        if (alreadyDestroyed) return;
+        if (alreadyDestroyed)
+            return;
 
         alreadyDestroyed = true;
-        VFX.Play();
-        visualObject.SetActive(false);
+
+        PlayDestroyEffects();
+
+        SetActiveVisual(false);
+    }
+
+    private void PlayDestroyEffects()
+    {
+        vfx.Play();
+    }
+
+    private void SetActiveVisual(bool active)
+    {
+        visualObject.SetActive(active);
     }
 
     private void ResetAll()
     {
         alreadyDestroyed = false;
-        VFX.Stop();
-        visualObject.SetActive(true);
+
+        vfx.Stop();
+
+        SetActiveVisual(true);
     }
 
-    void OnDestroy()
+    private void OnDestroy()
     {
-        GameManager.ResetAll -= ResetAll;
+        UnsubscribeEvents();
     }
 }

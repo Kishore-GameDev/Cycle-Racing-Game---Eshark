@@ -2,24 +2,39 @@ using UnityEngine;
 
 public class ObstacleDetector : MonoBehaviour
 {
-    [SerializeField] private AIController aIController;
+    [Header("References")]
+    [SerializeField] private AIController aiController;
 
-    void OnTriggerEnter(Collider other)
+    private void OnTriggerEnter(Collider other)
     {
-        if (other.gameObject.CompareTag("Oil"))
+        if (other.CompareTag("Oil"))
         {
-            aIController.DetectedObstacle(ObstacleType.Oil);
+            DetectObstacle(ObstacleType.Oil);
+
+            return;
         }
-        else if (other.gameObject.CompareTag("Mud"))
+
+        if (other.CompareTag("Mud"))
         {
-            aIController.DetectedObstacle(ObstacleType.Mud);
+            DetectObstacle(ObstacleType.Mud);
+
+            return;
         }
-        else if (other.gameObject.CompareTag("Barr") && other.gameObject.TryGetComponent(out Barricade comp))
-        {
-            if (comp.IsActive())
-            {
-                aIController.DetectedObstacle(ObstacleType.Barricade);
-            }
-        }
+
+        if (!other.CompareTag("Barr"))
+            return;
+
+        if (!other.TryGetComponent(out Barricade barricade))
+            return;
+
+        if (!barricade.IsActive())
+            return;
+
+        DetectObstacle(ObstacleType.Barricade);
+    }
+
+    private void DetectObstacle(ObstacleType obstacleType)
+    {
+        aiController.DetectedObstacle(obstacleType);
     }
 }

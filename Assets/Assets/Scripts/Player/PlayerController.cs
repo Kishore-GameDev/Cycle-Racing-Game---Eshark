@@ -12,20 +12,30 @@ public enum PlayerState
     BarricadeCrash
 }
 
-public class PlayerController : MonoBehaviour
+public class PlayerController : RacerControllerBase
 {
+    [Header("References")]
     [SerializeField] private AnimationController animationController;
     [SerializeField] private InputManager inputManager;
     [SerializeField] private SplineComputer spline;
 
+    [Header("Movement")]
     [SerializeField] private float maxSpeed = 30f;
     [SerializeField] private float accelerationRate = 18f;
     [SerializeField] private float decelerationRate = 8f;
-
     [SerializeField] private float rotationSpeed = 100f;
 
+    [Header("Lean")]
     [SerializeField] private float maxLeanAngle = 25f;
     [SerializeField] private float leanSmoothSpeed = 5f;
+
+    private PlayerState playerState;
+
+    private Coroutine oilCrashRoutine;
+    private Coroutine mudCrashRoutine;
+    private Coroutine barricadeCrashRoutine;
+    private Coroutine shieldRoutine;
+    private Coroutine scoreBoosterRoutine;
 
     private float currentYaw;
     private float currentSpeed;
@@ -34,63 +44,81 @@ public class PlayerController : MonoBehaviour
     private float targetLean;
 
     private float finalSpeed;
-    private float actualDecelerationRate;
-    private float actualMaxSpeed;
-    private bool oilCrash = false;
-    private bool playerCanMove = false;
-    private PlayerState playerState;
 
-    private Coroutine oilCrashRoutine = null;
-    private Coroutine mudCrashRoutine = null;
-    private Coroutine barricadeCrashRoutine = null;
+    private float actualMaxSpeed;
+    private float actualDecelerationRate;
+
+    private float currentRaceCompletePercent;
+
+    private bool oilCrash;
+    private bool playerCanMove;
+    private bool registeredRaceComplete = true;
 
     private Vector3 startPos;
     private Quaternion startRot;
-    private float currentRaceCompletePercent;
-    private bool registeredRaceComplete = true;
+    private Vector3 previousPosition;
 
-    void Start()
+    private void Start()
     {
-        inputManager.OnMoveContinues += MovementManagement;
-        GameManager.StartRace += StartRace;
-        GameManager.StopRace += StopRace;
-        GameManager.ResetAll += ResetAll;
+        SubscribeEvents();
+        Initialize();
+    }
 
+    private void Update()
+    {
+        CheckWrongWay();
+        CheckRaceComplete();
+    }
+
+    private void Initialize()
+    {
         actualMaxSpeed = maxSpeed;
         actualDecelerationRate = decelerationRate;
 
-        playerState = PlayerState.Idle;
-        UpdateState(PlayerState.Move);
-
-        SplineSample sample = new();
-        spline.Project(transform.position, ref sample);
-        currentYaw = Quaternion.LookRotation(sample.forward).eulerAngles.y;
-
         startPos = transform.position;
         startRot = transform.rotation;
+        previousPosition = transform.position;
+
+        UpdateSplineYaw();
+
+        playerState = PlayerState.Idle;
+
+        UpdateState(PlayerState.Move);
     }
 
+    #region Events
+    private void SubscribeEvents()
+    {
+        inputManager.OnMoveContinues += MovementManagement;
+
+        GameManager.StartRace += StartRace;
+        GameManager.StopRace += StopRace;
+        GameManager.ResetAll += ResetAll;
+    }
+
+    private void UnsubscribeEvents()
+    {
+        inputManager.OnMoveContinues -= MovementManagement;
+
+        GameManager.StartRace -= StartRace;
+        GameManager.StopRace -= StopRace;
+        GameManager.ResetAll -= ResetAll;
+    }
+    #endregion
+
+    #region Race
     private void StartRace(float raceCompletePercent)
     {
         registeredRaceComplete = false;
+
         currentRaceCompletePercent = raceCompletePercent;
+
         UpdateState(PlayerState.Move);
     }
 
     private void StopRace(bool isPlayerWon)
     {
-        if (oilCrashRoutine != null)
-        {
-            StopCoroutine(oilCrashRoutine);
-        }
-        if (mudCrashRoutine != null)
-        {
-            StopCoroutine(mudCrashRoutine);
-        }
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-        }
+        ResetCoroutines();
 
         if (isPlayerWon)
         {
@@ -101,84 +129,113 @@ public class PlayerController : MonoBehaviour
             UpdateState(PlayerState.Idle);
         }
     }
+    #endregion
 
-    private void UpdateState(PlayerState _playerState)
+    #region States
+    private void UpdateState(PlayerState newState)
     {
-        if (playerState == _playerState) return;
+        if (playerState == newState)
+            return;
 
-        playerState = _playerState;
+        playerState = newState;
 
         switch (playerState)
         {
             case PlayerState.Idle:
-                animationController.UpdateCycleAnimState(CycleAnimState.Idle);
-                playerCanMove = false;
+                EnterIdleState();
                 break;
 
             case PlayerState.Move:
-                playerCanMove = true;
-                break;
-
-            case PlayerState.OilCrash:
-                oilCrash = true;
-                ResetOilCrashRoutine();
-                oilCrashRoutine = StartCoroutine(OilCrash());
-                break;
-
-            case PlayerState.MudCrash:
-                ResetMudCrashRoutine();
-                mudCrashRoutine = StartCoroutine(MudCrash());
-                break;
-
-            case PlayerState.BarricadeCrash:
-                ResetBarricadeCrashRoutine();
-                barricadeCrashRoutine = StartCoroutine(BarricadeCrash());
+                EnterMoveState();
                 break;
 
             case PlayerState.Celebration:
-                playerCanMove = false;
-                animationController.UpdateCycleAnimState(CycleAnimState.Celebration);
+                EnterCelebrationState();
+                break;
+
+            case PlayerState.OilCrash:
+                EnterOilCrashState();
+                break;
+
+            case PlayerState.MudCrash:
+                EnterMudCrashState();
+                break;
+
+            case PlayerState.BarricadeCrash:
+                EnterBarricadeCrashState();
                 break;
         }
     }
 
-    void Update()
+    private void EnterIdleState()
     {
-        if (IsMovingOppositeDirection())
-        {
-            Debug.Log("Wrong Way");
-        }
+        playerCanMove = false;
 
-        if (!registeredRaceComplete && GetPlayerSplinePercent() >= currentRaceCompletePercent)
-        {
-            registeredRaceComplete = true;
-            GameManager.Instance.RaceCompletedRegister(true);
-        }
+        animationController.UpdateCycleAnimState(CycleAnimState.Idle);
     }
 
-    private float GetPlayerSplinePercent()
+    private void EnterMoveState()
     {
-        SplineSample sample = new();
-
-        spline.Project(transform.position, ref sample);
-
-        return (float)sample.percent * 100;
+        playerCanMove = true;
     }
+
+    private void EnterCelebrationState()
+    {
+        playerCanMove = false;
+
+        animationController.UpdateCycleAnimState(CycleAnimState.Celebration);
+    }
+
+    private void EnterOilCrashState()
+    {
+        StopRoutine(ref oilCrashRoutine);
+
+        oilCrashRoutine = StartCoroutine(OilCrash());
+    }
+
+    private void EnterMudCrashState()
+    {
+        StopRoutine(ref mudCrashRoutine);
+
+        mudCrashRoutine = StartCoroutine(MudCrash());
+    }
+
+    private void EnterBarricadeCrashState()
+    {
+        StopRoutine(ref barricadeCrashRoutine);
+
+        barricadeCrashRoutine = StartCoroutine(BarricadeCrash());
+    }
+    #endregion
 
     #region Movement
     private void MovementManagement(Vector2 moveInput)
     {
         if (!playerCanMove)
-        {
             return;
-        }
 
         if (oilCrash)
         {
-            moveInput.x = 0f;
-            moveInput.y = 0f;
+            moveInput = Vector2.zero;
         }
 
+        HandleAcceleration(moveInput);
+
+        HandleMovement();
+
+        HandleRotation(moveInput);
+
+        HandleLean(moveInput);
+
+        HandleAnimation();
+
+        FollowSplineHeight();
+
+        RestrictInsideTrack();
+    }
+
+    private void HandleAcceleration(Vector2 moveInput)
+    {
         if (moveInput.y > 0)
         {
             currentSpeed += accelerationRate * Time.deltaTime;
@@ -188,15 +245,41 @@ public class PlayerController : MonoBehaviour
             currentSpeed -= decelerationRate * Time.deltaTime;
         }
 
-        currentSpeed = Mathf.Clamp(currentSpeed, 0f, maxSpeed);
+        currentSpeed = Mathf.Clamp(
+            currentSpeed,
+            0f,
+            maxSpeed
+        );
+
         finalSpeed = currentSpeed;
+    }
+
+    private void HandleMovement()
+    {
         transform.position += finalSpeed * Time.deltaTime * transform.forward;
 
-        if (currentSpeed > 0.1f)
-        {
-            currentYaw += moveInput.x * rotationSpeed * Time.deltaTime;
-        }
+        float movedDistance =
+            Vector3.Distance(
+                previousPosition,
+                transform.position
+            );
 
+        if (!IsMovingOppositeDirection())
+            ScoreManager.AddMeterScore(RacerID, ScoreBoosterActive, movedDistance);
+
+        previousPosition = transform.position;
+    }
+
+    private void HandleRotation(Vector2 moveInput)
+    {
+        if (currentSpeed <= 0.1f)
+            return;
+
+        currentYaw += moveInput.x * rotationSpeed * Time.deltaTime;
+    }
+
+    private void HandleLean(Vector2 moveInput)
+    {
         if (Mathf.Abs(moveInput.x) > 0.01f && currentSpeed > 1f)
         {
             targetLean = -moveInput.x * maxLeanAngle;
@@ -206,62 +289,100 @@ public class PlayerController : MonoBehaviour
             targetLean = 0f;
         }
 
-        currentLean = Mathf.Lerp(currentLean, targetLean, leanSmoothSpeed * Time.deltaTime);
-        if (!oilCrash)
+        currentLean = Mathf.Lerp(
+            currentLean,
+            targetLean,
+            leanSmoothSpeed *
+            Time.deltaTime
+        );
+    }
+
+    private void HandleAnimation()
+    {
+        if (oilCrash)
+            return;
+
+        if (currentSpeed <= 0f)
         {
-            if (currentSpeed <= 0)
-            {
-                animationController.UpdateCycleAnimState(CycleAnimState.Idle);
-            }
-            else
-            {
-                animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
-            }
+            animationController.UpdateCycleAnimState(CycleAnimState.Idle);
+
+            return;
         }
 
-        FollowSplineHeight();
-        RestrictInsideTrack();
+        animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
     }
 
     private void FollowSplineHeight()
     {
         SplineSample sample = new();
+
         spline.Project(transform.position, ref sample);
 
         Vector3 pos = transform.position;
+
         pos.y = sample.position.y;
+
         transform.position = pos;
 
         Quaternion slopeRotation = Quaternion.LookRotation(sample.forward, sample.up);
+
         Quaternion yawRotation = Quaternion.Euler(0f, currentYaw, 0f);
 
-        transform.rotation = yawRotation * Quaternion.Euler(slopeRotation.eulerAngles.x, 0f, currentLean);
+        transform.rotation =
+            yawRotation *
+            Quaternion.Euler(
+                slopeRotation.eulerAngles.x,
+                0f,
+                currentLean
+            );
     }
 
     private void RestrictInsideTrack()
     {
         SplineSample sample = new();
+
         spline.Project(transform.position, ref sample);
 
         Vector3 offset = transform.position - sample.position;
 
         float horizontalOffset = Vector3.Dot(offset, sample.right);
+
         float absOffset = Mathf.Abs(horizontalOffset);
-        float edgePercent = Mathf.InverseLerp(3f, 4f, absOffset);
-        float dragMultiplier = Mathf.Lerp(1f, 0.000001f, edgePercent);
+
+        float edgePercent =
+            Mathf.InverseLerp(
+                3f,
+                4f,
+                absOffset
+            );
+
+        float dragMultiplier =
+            Mathf.Lerp(
+                1f,
+                0.000001f,
+                edgePercent
+            );
 
         finalSpeed = currentSpeed * dragMultiplier;
+
         horizontalOffset = Mathf.Clamp(horizontalOffset, -4f, 4f);
 
         Vector3 finalPosition = sample.position + sample.right * horizontalOffset;
+
         finalPosition.y = sample.position.y;
+
         transform.position = finalPosition;
     }
     #endregion
 
-    #region Obstacle
+    #region Obstacles
     private void RanOverObstacle(ObstacleType obstacleType)
     {
+        if (ShieldActive)
+        {
+            return;
+        }
+
         switch (obstacleType)
         {
             case ObstacleType.Oil:
@@ -281,66 +402,89 @@ public class PlayerController : MonoBehaviour
     private IEnumerator OilCrash()
     {
         oilCrash = true;
+
         decelerationRate = currentSpeed * 0.9f;
+
         animationController.UpdateCycleAnimState(CycleAnimState.OilCrash);
 
+        UIManager.Instance.ShowCrashedText(2f);
         yield return new WaitForSeconds(2f);
+
         oilCrash = false;
+
         decelerationRate = actualDecelerationRate;
 
+        oilCrashRoutine = null;
+
         UpdateState(PlayerState.Move);
-    }
-    
-    private void ResetOilCrashRoutine()
-    {
-        if (oilCrashRoutine != null)
-        {
-            decelerationRate = actualDecelerationRate;
-            StopCoroutine(oilCrashRoutine);
-        }
     }
 
     private IEnumerator MudCrash()
     {
         maxSpeed = 15f;
+
+        UIManager.Instance.ShowSlowedText(5f);
         yield return new WaitForSeconds(5f);
 
         maxSpeed = actualMaxSpeed;
-        UpdateState(PlayerState.Move);
-    }
 
-    private void ResetMudCrashRoutine()
-    {
-        if (mudCrashRoutine != null)
-        {
-            maxSpeed = actualMaxSpeed;
-            StopCoroutine(mudCrashRoutine);
-        }
+        mudCrashRoutine = null;
+
+        UpdateState(PlayerState.Move);
     }
 
     private IEnumerator BarricadeCrash()
     {
         playerCanMove = false;
+
         currentSpeed = 0f;
-        SplineSample sample = new();
-        spline.Project(transform.position, ref sample);
-        currentYaw = Quaternion.LookRotation(sample.forward).eulerAngles.y;
+
+        UpdateSplineYaw();
+
         animationController.UpdateCycleAnimState(CycleAnimState.Idle);
 
+        UIManager.Instance.ShowCrashedText(3.5f);
         yield return new WaitForSeconds(3.5f);
+
+        barricadeCrashRoutine = null;
 
         UpdateState(PlayerState.Move);
     }
-
-    private void ResetBarricadeCrashRoutine()
-    {
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-            UpdateState(PlayerState.Move);
-        }
-    }
     #endregion
+
+    #region Race
+    private void CheckWrongWay()
+    {
+        if (!IsMovingOppositeDirection())
+        {
+            UIManager.Instance.SetActiveWrongDirectionText(false);
+            return;
+        }
+
+        UIManager.Instance.SetActiveWrongDirectionText(true);
+    }
+
+    private void CheckRaceComplete()
+    {
+        if (registeredRaceComplete)
+            return;
+
+        if (GetPlayerSplinePercent() < currentRaceCompletePercent)
+            return;
+
+        registeredRaceComplete = true;
+
+        GameManager.Instance.RaceCompletedRegister(true);
+    }
+
+    private float GetPlayerSplinePercent()
+    {
+        SplineSample sample = new();
+
+        spline.Project(transform.position, ref sample);
+
+        return (float)sample.percent * 100f;
+    }
 
     private bool IsMovingOppositeDirection()
     {
@@ -352,65 +496,166 @@ public class PlayerController : MonoBehaviour
 
         return dot < 0f;
     }
+    #endregion
 
-    void OnTriggerEnter(Collider other)
+    private void UpdateSplineYaw()
     {
-        if (other.gameObject.CompareTag("Oil"))
-        {
-            RanOverObstacle(ObstacleType.Oil);
-        }
-        else if (other.gameObject.CompareTag("Mud"))
-        {
-            RanOverObstacle(ObstacleType.Mud);
-        }
-        else if (other.gameObject.CompareTag("Barr") && other.gameObject.TryGetComponent(out Barricade comp))
-        {
-            if (comp.IsActive())
-            {
-                RanOverObstacle(ObstacleType.Barricade);
-                comp.DestroyBarricade();
-            }
-        }
+        SplineSample sample = new();
+
+        spline.Project(transform.position, ref sample);
+
+        currentYaw = Quaternion.LookRotation(sample.forward).eulerAngles.y;
+    }
+
+    #region Coroutines & Reset
+    private void ResetCoroutines()
+    {
+        StopRoutine(ref oilCrashRoutine);
+        StopRoutine(ref mudCrashRoutine);
+        StopRoutine(ref barricadeCrashRoutine);
+        StopRoutine(ref shieldRoutine);
+        StopRoutine(ref scoreBoosterRoutine);
+    }
+
+    private void StopRoutine(ref Coroutine routine)
+    {
+        if (routine == null)
+            return;
+
+        StopCoroutine(routine);
+
+        routine = null;
     }
 
     private void ResetAll()
     {
-        if (oilCrashRoutine != null)
-        {
-            StopCoroutine(oilCrashRoutine);
-        }
-        if (mudCrashRoutine != null)
-        {
-            StopCoroutine(mudCrashRoutine);
-        }
-        if (barricadeCrashRoutine != null)
-        {
-            StopCoroutine(barricadeCrashRoutine);
-        }
+        ResetCoroutines();
 
         currentSpeed = 0f;
+
         currentLean = 0f;
         targetLean = 0f;
+
         finalSpeed = 0f;
-        decelerationRate = actualDecelerationRate;
+
         maxSpeed = actualMaxSpeed;
+        decelerationRate = actualDecelerationRate;
+
         oilCrash = false;
         playerCanMove = false;
 
-        playerState = PlayerState.Idle;
-        animationController.UpdateCycleAnimState(CycleAnimState.Idle);
+        registeredRaceComplete = true;
+
+        shieldActive = false;
+        scoreBoosterActive = false;
 
         transform.SetPositionAndRotation(startPos, startRot);
-        SplineSample sample = new();
-        spline.Project(transform.position, ref sample);
-        currentYaw = Quaternion.LookRotation(sample.forward).eulerAngles.y;
+        previousPosition = transform.position;
+
+        UpdateSplineYaw();
+
+        UpdateState(PlayerState.Idle);
+    }
+    #endregion
+
+    #region PowerUps
+    private void ActivateShield()
+    {
+        shieldActive = true;
+
+        StopRoutine(ref shieldRoutine);
+        shieldRoutine = StartCoroutine(ShieldTimer());
     }
 
-    void OnDestroy()
+    private IEnumerator ShieldTimer()
     {
-        inputManager.OnMoveContinues -= MovementManagement;
-        GameManager.StartRace -= StartRace;
-        GameManager.StopRace -= StopRace;
-        GameManager.ResetAll -= ResetAll;
+        UIManager.Instance.StartShieldTimer(10f);
+        yield return new WaitForSeconds(10f);
+        shieldActive = false;
+    }
+    
+    private void ActivateScoreBooster()
+    {
+        scoreBoosterActive = true;
+
+        StopRoutine(ref scoreBoosterRoutine);
+        scoreBoosterRoutine = StartCoroutine(ScoreBoosterTimer());
+    }
+
+    private IEnumerator ScoreBoosterTimer()
+    {
+        UIManager.Instance.StartScoreBoosterTimer(10f);
+        yield return new WaitForSeconds(10f);
+        scoreBoosterActive = false;
+    }
+    #endregion
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Oil"))
+        {
+            RanOverObstacle(ObstacleType.Oil);
+
+            return;
+        }
+
+        if (other.CompareTag("Mud"))
+        {
+            RanOverObstacle(ObstacleType.Mud);
+
+            return;
+        }
+
+        if (other.CompareTag("Shield"))
+        {
+            if (!other.TryGetComponent(out PowerUp powerUp))
+            {
+                return;
+            }
+
+            if (!powerUp.IsActive)
+            {
+                return;
+            }
+
+            ActivateShield();
+            powerUp.Triggered();
+            return;
+        }
+        
+        if (other.CompareTag("SB"))
+        {
+            if (!other.TryGetComponent(out PowerUp powerUp))
+            {
+                return;
+            }
+
+            if (!powerUp.IsActive)
+            {
+                return;
+            }
+
+            ActivateScoreBooster();
+            powerUp.Triggered();
+            return;
+        }
+
+        if (!other.CompareTag("Barr"))
+            return;
+
+        if (!other.TryGetComponent(out Barricade barricade))
+            return;
+
+        if (!barricade.IsActive())
+            return;
+
+        RanOverObstacle(ObstacleType.Barricade);
+
+        barricade.DestroyBarricade();
+    }
+
+    private void OnDestroy()
+    {
+        UnsubscribeEvents();
     }
 }

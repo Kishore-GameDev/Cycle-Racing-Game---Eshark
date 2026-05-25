@@ -8,6 +8,8 @@ TagManager:
   - Oil
   - Mud
   - Barr
+  - Shield
+  - SB
   layers:
   - Default
   - TransparentFX

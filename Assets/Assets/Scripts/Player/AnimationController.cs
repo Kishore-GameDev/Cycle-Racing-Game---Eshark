@@ -11,63 +11,115 @@ public enum CycleAnimState
 
 public class AnimationController : MonoBehaviour
 {
+    [Header("References")]
     [SerializeField] private Animator animator;
 
     private CycleAnimState cycleAnimState;
 
-    private int idleAnimId = 0;
-    private int moveAnimId = 0;
-    private int celebrationAnimId = 0;
-    private int moveSpeedIntId = 0;
-    private int oilCrashId = 0;
+    private int idleAnimId;
+    private int moveAnimId;
+    private int celebrationAnimId;
+    private int moveSpeedId;
+    private int oilCrashId;
 
-    [Header("Testing")]
-    [OnValueChange(nameof(TestAnimFunc))][SerializeField] private CycleAnimState TestAnimState;
-    [OnValueChange(nameof(TestMoveSpeedFunc))][Range(0, 1)][SerializeField] private float TestMoveSpeed;
+    private const float transitionDuration = 0.2f;
 
-    void Start()
+    private void Start()
+    {
+        InitializeAnimatorHashes();
+    }
+
+    private void InitializeAnimatorHashes()
     {
         idleAnimId = Animator.StringToHash("Idle");
+
         moveAnimId = Animator.StringToHash("Move");
+
         celebrationAnimId = Animator.StringToHash("Celebration");
-        moveSpeedIntId = Animator.StringToHash("Move Speed");
+
+        moveSpeedId = Animator.StringToHash("Move Speed");
+
         oilCrashId = Animator.StringToHash("OilCrash");
     }
 
-    public void UpdateCycleAnimState(CycleAnimState _cycleAnimState, float moveSpeed = 0)
+    public void UpdateCycleAnimState(CycleAnimState newState, float moveSpeed = 0f)
     {
-        if (cycleAnimState == _cycleAnimState)
+        if (cycleAnimState == newState)
         {
-            if (cycleAnimState == CycleAnimState.Move)
-            {
-                animator.SetFloat(moveSpeedIntId, moveSpeed);
-            }
-            return;
-        }        
+            UpdateMoveSpeed(moveSpeed);
 
-        cycleAnimState = _cycleAnimState;
+            return;
+        }
+
+        cycleAnimState = newState;
 
         switch (cycleAnimState)
         {
             case CycleAnimState.Idle:
-                animator.CrossFadeInFixedTime(idleAnimId, 0.2f);
+                PlayIdle();
                 break;
 
             case CycleAnimState.Move:
-                animator.CrossFadeInFixedTime(moveAnimId, 0.2f);
-                animator.SetFloat(moveSpeedIntId, moveSpeed);
+                PlayMove(moveSpeed);
                 break;
 
             case CycleAnimState.Celebration:
-                animator.CrossFadeInFixedTime(celebrationAnimId, 0.2f);
+                PlayCelebration();
                 break;
 
             case CycleAnimState.OilCrash:
-                animator.CrossFadeInFixedTime(oilCrashId, 0.2f);
+                PlayOilCrash();
                 break;
         }
     }
 
-    public void TestAnimFunc() => UpdateCycleAnimState(TestAnimState, TestMoveSpeed);
-    public void TestMoveSpeedFunc() => UpdateCycleAnimState(TestAnimState, TestMoveSpeed);
+    private void PlayIdle()
+    {
+        animator.CrossFadeInFixedTime(idleAnimId, transitionDuration);
+    }
+
+    private void PlayMove(float moveSpeed)
+    {
+        animator.CrossFadeInFixedTime(moveAnimId, transitionDuration);
+
+        UpdateMoveSpeed(moveSpeed);
+    }
+
+    private void PlayCelebration()
+    {
+        animator.CrossFadeInFixedTime(celebrationAnimId, transitionDuration);
+    }
+
+    private void PlayOilCrash()
+    {
+        animator.CrossFadeInFixedTime(oilCrashId, transitionDuration);
+    }
+
+    private void UpdateMoveSpeed(float moveSpeed)
+    {
+        if (cycleAnimState != CycleAnimState.Move)
+            return;
+
+        animator.SetFloat(moveSpeedId, moveSpeed);
+    }
+
+    #region Test
+    [Header("Testing")]
+    [OnValueChange(nameof(TestAnimFunc))]
+    [SerializeField] private CycleAnimState testAnimState;
+
+    [OnValueChange(nameof(TestMoveSpeedFunc))]
+    [Range(0f, 1f)]
+    [SerializeField] private float testMoveSpeed;
+    
+    private void TestAnimFunc()
+    {
+        UpdateCycleAnimState(testAnimState, testMoveSpeed);
+    }
+
+    private void TestMoveSpeedFunc()
+    {
+        UpdateCycleAnimState(testAnimState, testMoveSpeed);
+    }
+    #endregion
 }
