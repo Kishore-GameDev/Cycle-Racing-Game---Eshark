@@ -4,97 +4,102 @@ using UnityEngine;
 public class PlayerController : MonoBehaviour
 {
     [SerializeField] private InputManager inputManager;
-    public SplineFollower follower;
+    [SerializeField] private SplineComputer spline;
 
-    [Header("Speed")]
-    public float maxSpeed = 70f;
-    public float acceleration = 40f;
+    [SerializeField] private float maxSpeed = 30f;
+    [SerializeField] private float accelerationRate = 18f;
+    [SerializeField] private float decelerationRate = 8f;
 
-    [Header("Steering")]
-    public float steeringSpeed = 120f;
-    public float moveSideSpeed = 6f;
-    public float maxRoadOffset = 4f;
+    [SerializeField] private float rotationSpeed = 100f;
 
-    [Header("Height")]
-    public float heightOffset = 0.5f;
+    [SerializeField] private float maxLeanAngle = 25f;
+    [SerializeField] private float leanSmoothSpeed = 5f;
 
-    public Vector2 moveInput;
-
-    private float currentSpeed;
-    private float roadOffset;
-
-    // PLAYER'S OWN ROTATION
     private float currentYaw;
+    private float currentSpeed;
+
+    private float currentLean;
+    private float targetLean;
+
+    private float finalSpeed;
 
     void Start()
     {
         inputManager.OnMoveContinues += MovementManagement;
+
+        SplineSample sample = new();
+        spline.Project(transform.position, ref sample);
+        currentYaw = Quaternion.LookRotation(sample.forward).eulerAngles.y;
     }
 
     private void MovementManagement(Vector2 moveInput)
     {
-        //-----------------------------------
-        // INPUT
-        //-----------------------------------
+        if (moveInput.y > 0)
+        {
+            currentSpeed += accelerationRate * Time.deltaTime;
+        }
+        else
+        {
+            currentSpeed -= decelerationRate * Time.deltaTime;
+        }
 
-        float horizontal = moveInput.x;
-        float vertical = Mathf.Max(moveInput.y, 0f);
+        currentSpeed = Mathf.Clamp(currentSpeed, 0f, maxSpeed);
+        finalSpeed = currentSpeed;
+        transform.position += finalSpeed * Time.deltaTime * transform.forward;
 
-        //-----------------------------------
-        // SPEED
-        //-----------------------------------
+        if (currentSpeed > 0.1f)
+        {
+            currentYaw += moveInput.x * rotationSpeed * Time.deltaTime;
+        }
 
-        float targetSpeed = vertical * maxSpeed;
+        if (Mathf.Abs(moveInput.x) > 0.01f && currentSpeed > 1f)
+        {
+            targetLean = -moveInput.x * maxLeanAngle;
+        }
+        else
+        {
+            targetLean = 0f;
+        }
 
-        currentSpeed = Mathf.MoveTowards(
-            currentSpeed,
-            targetSpeed,
-            acceleration * Time.deltaTime
-        );
+        currentLean = Mathf.Lerp(currentLean, targetLean, leanSmoothSpeed * Time.deltaTime);
 
-        follower.followSpeed = currentSpeed;
+        FollowSplineHeight();
+        RestrictInsideTrack();
+    }
 
-        //-----------------------------------
-        // ROAD OFFSET
-        //-----------------------------------
+    private void FollowSplineHeight()
+    {
+        SplineSample sample = new();
+        spline.Project(transform.position, ref sample);
 
-        roadOffset +=
-            horizontal * moveSideSpeed * Time.deltaTime;
+        Vector3 pos = transform.position;
+        pos.y = sample.position.y;
+        transform.position = pos;
 
-        roadOffset = Mathf.Clamp(
-            roadOffset,
-            -maxRoadOffset,
-            maxRoadOffset
-        );
+        Quaternion slopeRotation = Quaternion.LookRotation(sample.forward, sample.up);
+        Quaternion yawRotation = Quaternion.Euler(0f, currentYaw, 0f);
 
-        //-----------------------------------
-        // SPLINE SAMPLE
-        //-----------------------------------
+        transform.rotation = yawRotation * Quaternion.Euler(slopeRotation.eulerAngles.x, 0f, currentLean);
+    }
 
-        SplineSample sample = follower.result;
+    private void RestrictInsideTrack()
+    {
+        SplineSample sample = new();
+        spline.Project(transform.position, ref sample);
 
-        //-----------------------------------
-        // POSITION
-        //-----------------------------------
+        Vector3 offset = transform.position - sample.position;
 
-        Vector3 finalPos =
-            sample.position +
-            sample.right * roadOffset +
-            sample.up * heightOffset;
+        float horizontalOffset = Vector3.Dot(offset, sample.right);
+        float absOffset = Mathf.Abs(horizontalOffset);
+        float edgePercent = Mathf.InverseLerp(3.5f, 4f, absOffset);
+        float dragMultiplier = Mathf.Lerp(1f, 0.05f, edgePercent);
 
-        transform.position = finalPos;
+        finalSpeed = currentSpeed * dragMultiplier;
+        horizontalOffset = Mathf.Clamp(horizontalOffset, -4f, 4f);
 
-        //-----------------------------------
-        // MANUAL PLAYER ROTATION
-        //-----------------------------------
-
-        currentYaw +=
-            horizontal * steeringSpeed * Time.deltaTime;
-
-        Quaternion playerRotation =
-            Quaternion.Euler(0f, currentYaw, 0f);
-
-        transform.rotation = playerRotation;
+        Vector3 finalPosition = sample.position + sample.right * horizontalOffset;
+        finalPosition.y = sample.position.y;
+        transform.position = finalPosition;
     }
 
     void OnDestroy()

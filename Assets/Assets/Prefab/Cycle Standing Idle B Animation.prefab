@@ -2608,6 +2608,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b3f8d679200883544bf2e29269ac312e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AnimationController
+  animator: {fileID: 1171822080777298640}
 --- !u!1 &7270746812932329829
 GameObject:
   m_ObjectHideFlags: 0
