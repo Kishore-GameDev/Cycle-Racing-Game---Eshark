@@ -93,7 +93,7 @@ LightmapSettings:
     m_ExportTrainingData: 0
     m_TrainingDataDestination: TrainingData
     m_LightProbeSampleCountMultiplier: 4
-  m_LightingDataAsset: {fileID: 0}
+  m_LightingDataAsset: {fileID: 112000000, guid: 8d35078744657f740a9e86b5a9b50c2e, type: 2}
   m_LightingSettings: {fileID: 4890085278179872738, guid: b4a546a1757fbf04489a1b4f9f143b2e, type: 2}
 --- !u!196 &4
 NavMeshSettings:
@@ -1584,67 +1584,6 @@ Transform:
   - {fileID: 1559294961}
   m_Father: {fileID: 2010097363}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &366866044
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: -529.5
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 24.64
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 463.2
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 0.9043011
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0.4268952
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: -50.541
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 3874463826416742461, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_ConstrainProportionsScale
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 7248156763463734373, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
-      propertyPath: m_Name
-      value: Cycle Standing Idle B Animation
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: 3834811fb5d93b04b8c8c0835774e2aa, type: 3}
 --- !u!1 &450438755
 GameObject:
   m_ObjectHideFlags: 0
@@ -131119,4 +131058,3 @@ SceneRoots:
   - {fileID: 1357447922}
   - {fileID: 1231247076}
   - {fileID: 1310321570}
-  - {fileID: 366866044}
