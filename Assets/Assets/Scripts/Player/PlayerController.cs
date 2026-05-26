@@ -83,8 +83,7 @@ public class PlayerController : RacerControllerBase
         UpdateSplineYaw();
 
         playerState = PlayerState.Idle;
-
-        UpdateState(PlayerState.Move);
+        playerCanMove = false;
     }
 
     #region Events
