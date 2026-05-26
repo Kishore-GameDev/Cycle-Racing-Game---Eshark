@@ -207,11 +207,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9e831baff23b87840af4e4707738a42c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AIController
+  racerID: 0
   animationController: {fileID: 8483471893155563528}
   splineFollower: {fileID: 3654730752966005418}
   aIConfig: {fileID: 11400000, guid: 646b8d41262b36043bc0832ec3ab84eb, type: 2}
   startDistance: 0
-  TestAIState: 0
+  testAIState: 0
 --- !u!1 &6270519189270407164
 GameObject:
   m_ObjectHideFlags: 0
@@ -306,7 +307,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 95b7f3fb4847fbc4caca01bd14259093, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ObstacleDetector
-  aIController: {fileID: 5470132779365214185}
+  aiController: {fileID: 5470132779365214185}
 --- !u!1001 &5872704750328542563
 PrefabInstance:
   m_ObjectHideFlags: 0

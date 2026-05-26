@@ -42,10 +42,13 @@ public class AIController : RacerControllerBase
     private Coroutine oilCrashRoutine;
     private Coroutine mudCrashRoutine;
     private Coroutine barricadeCrashRoutine;
+    private Coroutine shieldRoutine;
+    private Coroutine scoreBoosterRoutine;
 
     private float currentSpeed;
     private float maxSpeed;
     private float acceleration;
+    private Vector3 previousPosition;
 
     private float currentRaceCompletePercent;
 
@@ -88,6 +91,7 @@ public class AIController : RacerControllerBase
         splineFollower.followSpeed = 0f;
 
         currentSpeed = 0f;
+        previousPosition = transform.position;
 
         aiState = AIState.Idle;
     }
@@ -123,7 +127,14 @@ public class AIController : RacerControllerBase
     private void StopRace(bool isPlayerWon)
     {
         if (alreadyStoppedRace)
+        {
             return;
+        }
+
+        if (!registeredRaceComplete)
+        {
+            GameManager.Instance.RaceNotCompletedRegister(RacerID, GetCurrentCompletedPercentage());
+        }
 
         alreadyStoppedRace = true;
 
@@ -139,17 +150,14 @@ public class AIController : RacerControllerBase
         if (registeredRaceComplete)
             return;
 
-        if (splineFollower.result.percent * 100f < currentRaceCompletePercent)
+        if (GetCurrentCompletedPercentage() < currentRaceCompletePercent)
             return;
 
         registeredRaceComplete = true;
 
         bool isFirst = GameManager.Instance.DidAnyoneWonRace();
 
-        GameManager.Instance.RaceCompletedRegister(
-            false,
-            aIConfig.aiName
-        );
+        GameManager.Instance.RaceCompletedRegister(RacerID);
 
         StopRace(false);
 
@@ -157,6 +165,11 @@ public class AIController : RacerControllerBase
         {
             UpdateState(AIState.Won);
         }
+    }
+
+    private double GetCurrentCompletedPercentage()
+    {
+        return splineFollower.result.percent * 100f;
     }
     #endregion
 
@@ -245,14 +258,27 @@ public class AIController : RacerControllerBase
 
         splineFollower.followSpeed = currentSpeed;
 
+        float movedDistance = Vector3.Distance(previousPosition, transform.position);
+
+        ScoreManager.AddMeterScore(RacerID, ScoreBoosterActive, movedDistance);
+
+        previousPosition = transform.position;
+
         animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
     }
 
     #region Obstacles
     public void CrashOnObstacle(ObstacleType obstacleType)
     {
-        if (aiState == AIState.Won)
+        if (ShieldActive)
+        {
             return;
+        }
+
+        if (aiState == AIState.Won)
+        {
+            return;
+        }
 
         switch (obstacleType)
         {
@@ -389,6 +415,8 @@ public class AIController : RacerControllerBase
         StopRoutine(ref oilCrashRoutine);
         StopRoutine(ref mudCrashRoutine);
         StopRoutine(ref barricadeCrashRoutine);
+        StopRoutine(ref shieldRoutine);
+        StopRoutine(ref scoreBoosterRoutine);
     }
 
     private void StopRoutine(ref Coroutine routine)
@@ -410,6 +438,9 @@ public class AIController : RacerControllerBase
         alreadyStoppedRace = false;
         registeredRaceComplete = true;
 
+        shieldActive = false;
+        scoreBoosterActive = false;
+
         currentLane = aIConfig.startLane;
 
         maxSpeed = aIConfig.maxSpeed;
@@ -424,8 +455,39 @@ public class AIController : RacerControllerBase
         splineFollower.RebuildImmediate();
 
         splineFollower.Evaluate(0f);
+        previousPosition = transform.position;
 
         UpdateState(AIState.Idle);
+    }
+    #endregion
+
+    #region PowerUps
+    private void ActivateShield()
+    {
+        shieldActive = true;
+
+        StopRoutine(ref shieldRoutine);
+        shieldRoutine = StartCoroutine(ShieldTimer());
+    }
+
+    private IEnumerator ShieldTimer()
+    {
+        yield return new WaitForSeconds(10f);
+        shieldActive = false;
+    }
+    
+    private void ActivateScoreBooster()
+    {
+        scoreBoosterActive = true;
+
+        StopRoutine(ref scoreBoosterRoutine);
+        scoreBoosterRoutine = StartCoroutine(ScoreBoosterTimer());
+    }
+
+    private IEnumerator ScoreBoosterTimer()
+    {
+        yield return new WaitForSeconds(10f);
+        scoreBoosterActive = false;
     }
     #endregion
 
@@ -442,6 +504,40 @@ public class AIController : RacerControllerBase
         {
             CrashOnObstacle(ObstacleType.Mud);
 
+            return;
+        }
+
+        if (other.CompareTag("Shield"))
+        {
+            if (!other.TryGetComponent(out PowerUp powerUp))
+            {
+                return;
+            }
+
+            if (!powerUp.IsActive)
+            {
+                return;
+            }
+
+            ActivateShield();
+            powerUp.Triggered();
+            return;
+        }
+        
+        if (other.CompareTag("SB"))
+        {
+            if (!other.TryGetComponent(out PowerUp powerUp))
+            {
+                return;
+            }
+
+            if (!powerUp.IsActive)
+            {
+                return;
+            }
+
+            ActivateScoreBooster();
+            powerUp.Triggered();
             return;
         }
 

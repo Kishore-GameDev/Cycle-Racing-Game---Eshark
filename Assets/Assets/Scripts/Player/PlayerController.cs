@@ -68,6 +68,7 @@ public class PlayerController : RacerControllerBase
     {
         CheckWrongWay();
         CheckRaceComplete();
+        UpdateRaceProgress();
     }
 
     private void Initialize()
@@ -474,7 +475,24 @@ public class PlayerController : RacerControllerBase
 
         registeredRaceComplete = true;
 
-        GameManager.Instance.RaceCompletedRegister(true);
+        GameManager.Instance.RaceCompletedRegister(RacerID);
+    }
+
+    private void UpdateRaceProgress()
+    {
+        float raceProgress = GetRaceProgress();
+        UIManager.Instance.UpdateProgressText((int)raceProgress);
+    }
+
+    private float GetRaceProgress()
+    {
+        SplineSample sample = new();
+
+        spline.Project(transform.position, ref sample);
+
+        float currentPercent = (float)sample.percent * 100f;
+
+        return Mathf.Clamp01(currentPercent / currentRaceCompletePercent) * 100f;
     }
 
     private float GetPlayerSplinePercent()

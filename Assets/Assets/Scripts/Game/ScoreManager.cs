@@ -14,9 +14,10 @@ public class ScoreManager : MonoBehaviour
 
     private float perMeter = 10f;
 
-    private static ScoreManager Instance;
+    public static ScoreManager Instance;
 
     private readonly Dictionary<RacerID, int> scores = new();
+    public Dictionary<RacerID, int> Scores => scores;
 
     private readonly Dictionary<RacerID, float> meterProgress = new();
 
@@ -25,6 +26,11 @@ public class ScoreManager : MonoBehaviour
         Instance = this;
 
         InitializeScores();
+    }
+
+    void Start()
+    {
+        GameManager.ResetAll += ResetScores;
     }
 
     private void InitializeScores()
@@ -73,11 +79,6 @@ public class ScoreManager : MonoBehaviour
         UpdateUI();
     }
 
-    public static int GetScore(RacerID racerID)
-    {
-        return Instance.scores[racerID];
-    }
-
     public static void ResetScores()
     {
         Instance.InitializeScores();
@@ -85,6 +86,11 @@ public class ScoreManager : MonoBehaviour
 
     private void UpdateUI()
     {
-        playerScoreText.text = "Score: " + scores[RacerID.Player];
+        UIManager.Instance.UpdateScoreText(scores[RacerID.Player]);
+    }
+
+    void OnDestroy()
+    {
+        GameManager.ResetAll -= ResetScores;
     }
 }
