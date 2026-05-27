@@ -31,6 +31,13 @@ public class AIController : RacerControllerBase
     [Header("Settings")]
     [SerializeField] private float startDistance;
 
+    [Header("Lean")]
+    [SerializeField] private float maxLeanAngle = 25f;
+    [SerializeField] private float leanSmoothSpeed = 5f;
+
+    [SerializeField]
+    private Transform leanPivot;
+
 
     private readonly MinMax laneOffset = new(-3f, 3f);
 
@@ -45,16 +52,19 @@ public class AIController : RacerControllerBase
     private Coroutine shieldRoutine;
     private Coroutine scoreBoosterRoutine;
 
+    private const float laneSwitchSpeed = 18f;
     private float currentSpeed;
     private float maxSpeed;
     private float acceleration;
-    private Vector3 previousPosition;
+    private float currentLean;
+    private float targetLean;
 
     private double previousSplinePercent;
+
     private int completedLaps;
     private int totalLaps;
 
-    private const float laneSwitchSpeed = 18f;
+    private Vector3 previousPosition;
 
     private bool alreadyStoppedRace;
     private bool registeredRaceComplete = true;
@@ -150,6 +160,8 @@ public class AIController : RacerControllerBase
         ResetCoroutines();
 
         currentSpeed = 0f;
+        
+        leanPivot.localRotation = Quaternion.Euler(Vector3.zero);
 
         UpdateState(AIState.Idle);
     }
@@ -278,13 +290,71 @@ public class AIController : RacerControllerBase
 
         splineFollower.followSpeed = currentSpeed;
 
-        float movedDistance = Vector3.Distance(previousPosition, transform.position);
+        HandleLean();
 
-        ScoreManager.AddMeterScore(RacerID, ScoreBoosterActive, movedDistance);
+        float movedDistance =
+            Vector3.Distance(
+                previousPosition,
+                transform.position
+            );
+
+        ScoreManager.AddMeterScore(
+            RacerID,
+            ScoreBoosterActive,
+            movedDistance
+        );
 
         previousPosition = transform.position;
 
-        animationController.UpdateCycleAnimState(CycleAnimState.Move, currentSpeed / maxSpeed);
+        animationController.UpdateCycleAnimState(
+            CycleAnimState.Move,
+            currentSpeed / maxSpeed
+        );
+    }
+
+    private void HandleLean()
+    {
+        Vector3 currentForward =
+            splineFollower.result.forward;
+
+        Vector3 futureForward =
+            splineFollower.EvaluatePosition(
+                splineFollower.result.percent + 0.001
+            ) -
+            splineFollower.result.position;
+
+        futureForward.Normalize();
+
+        float turnAmount =
+            Vector3.SignedAngle(
+                currentForward,
+                futureForward,
+                Vector3.up
+            );
+
+        targetLean =
+            -turnAmount * 5f;
+
+        targetLean =
+            Mathf.Clamp(
+                targetLean,
+                -maxLeanAngle,
+                maxLeanAngle
+            );
+
+        currentLean = Mathf.Lerp(
+            currentLean,
+            targetLean,
+            leanSmoothSpeed *
+            Time.deltaTime
+        );
+
+        leanPivot.localRotation =
+            Quaternion.Euler(
+                0f,
+                0f,
+                currentLean
+            );
     }
 
     #region Obstacles
@@ -373,6 +443,7 @@ public class AIController : RacerControllerBase
     private IEnumerator OilCrash()
     {
         float deceleration = currentSpeed * 0.9f;
+        leanPivot.localRotation = Quaternion.Euler(Vector3.zero);
 
         animationController.UpdateCycleAnimState(
             CycleAnimState.OilCrash
@@ -416,6 +487,7 @@ public class AIController : RacerControllerBase
 
     private IEnumerator BarricadeCrash()
     {
+        leanPivot.localRotation = Quaternion.Euler(Vector3.zero);
         currentSpeed = 0f;
 
         UpdateState(AIState.Idle);
@@ -455,6 +527,9 @@ public class AIController : RacerControllerBase
 
         currentSpeed = 0f;
         completedLaps = 0;
+        currentLean = 0f;
+        targetLean = 0f;
+        leanPivot.localRotation = Quaternion.Euler(Vector3.zero);
 
         alreadyStoppedRace = false;
         registeredRaceComplete = true;

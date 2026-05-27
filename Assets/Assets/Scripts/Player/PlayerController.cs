@@ -57,6 +57,7 @@ public class PlayerController : RacerControllerBase
     private bool playerCanMove;
     private bool onceMoved;
     private bool registeredRaceComplete;
+    private bool illegalFinishLineCross;
 
     private Vector3 startPos;
     private Quaternion startRot;
@@ -125,6 +126,7 @@ public class PlayerController : RacerControllerBase
     {
         registeredRaceComplete = false;
         onceMoved = false;
+        illegalFinishLineCross = false;
 
         previousSplinePercent = GetPlayerSplinePercent();
 
@@ -489,10 +491,21 @@ public class PlayerController : RacerControllerBase
 
     private void CheckRaceComplete()
     {
-        if (registeredRaceComplete)
+        if (IsMovingOppositeDirection() || illegalFinishLineCross)
+        {
             return;
+        }
+
+        if (registeredRaceComplete)
+        {
+            return;
+        }
 
         double currentPercent = GetPlayerSplinePercent();
+        if (previousSplinePercent < 0.1 && currentPercent > 0.9)
+        {
+            return;
+        }
 
         if (previousSplinePercent > 0.9 && currentPercent < 0.1)
         {
@@ -512,7 +525,7 @@ public class PlayerController : RacerControllerBase
 
     private void UpdateRaceProgress()
     {
-        float raceProgress = GetRaceProgress();
+        float raceProgress = IsMovingOppositeDirection() || illegalFinishLineCross ? 0f : GetRaceProgress();
 
         UIManager.Instance.UpdateProgressText((int)raceProgress);
     }
@@ -647,6 +660,17 @@ public class PlayerController : RacerControllerBase
 
     private void OnTriggerEnter(Collider other)
     {
+        if (other.CompareTag("Finish"))
+        {
+            if (IsMovingOppositeDirection())
+            {
+                illegalFinishLineCross = true;
+                Debug.Log("Illegal Entry");
+            }
+
+            return;
+        }
+
         if (other.CompareTag("Oil"))
         {
             RanOverObstacle(ObstacleType.Oil);
@@ -707,6 +731,17 @@ public class PlayerController : RacerControllerBase
         RanOverObstacle(ObstacleType.Barricade);
 
         barricade.DestroyBarricade();
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (other.CompareTag("Finish"))
+        {
+            if (!IsMovingOppositeDirection() && illegalFinishLineCross)
+            {
+                illegalFinishLineCross = false;
+            }
+        }
     }
 
     private void OnDestroy()
