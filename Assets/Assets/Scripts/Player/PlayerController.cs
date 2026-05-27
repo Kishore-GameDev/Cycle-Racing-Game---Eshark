@@ -37,6 +37,11 @@ public class PlayerController : RacerControllerBase
     private Coroutine shieldRoutine;
     private Coroutine scoreBoosterRoutine;
 
+    private int totalLaps;
+    private int completedLaps;
+
+    private double previousSplinePercent;
+   
     private float currentYaw;
     private float currentSpeed;
 
@@ -48,11 +53,10 @@ public class PlayerController : RacerControllerBase
     private float actualMaxSpeed;
     private float actualDecelerationRate;
 
-    private float currentRaceCompletePercent;
-
     private bool oilCrash;
     private bool playerCanMove;
-    private bool registeredRaceComplete = true;
+    private bool onceMoved;
+    private bool registeredRaceComplete;
 
     private Vector3 startPos;
     private Quaternion startRot;
@@ -91,6 +95,7 @@ public class PlayerController : RacerControllerBase
     {
         inputManager.OnMoveContinues += MovementManagement;
 
+        GameManager.CountDownStarted += CountDownStarted;
         GameManager.StartRace += StartRace;
         GameManager.StopRace += StopRace;
         GameManager.ResetAll += ResetAll;
@@ -100,6 +105,7 @@ public class PlayerController : RacerControllerBase
     {
         inputManager.OnMoveContinues -= MovementManagement;
 
+        GameManager.CountDownStarted -= CountDownStarted;
         GameManager.StartRace -= StartRace;
         GameManager.StopRace -= StopRace;
         GameManager.ResetAll -= ResetAll;
@@ -107,11 +113,20 @@ public class PlayerController : RacerControllerBase
     #endregion
 
     #region Race
-    private void StartRace(float raceCompletePercent)
+    private void CountDownStarted(int totalLapCount)
+    {
+        completedLaps = 0;
+        totalLaps = totalLapCount;
+        
+        UIManager.Instance.UpdateLapText(completedLaps, totalLaps);
+    }
+
+    private void StartRace()
     {
         registeredRaceComplete = false;
+        onceMoved = false;
 
-        currentRaceCompletePercent = raceCompletePercent;
+        previousSplinePercent = GetPlayerSplinePercent();
 
         UpdateState(PlayerState.Move);
     }
@@ -214,6 +229,14 @@ public class PlayerController : RacerControllerBase
         if (!playerCanMove)
             return;
 
+        if (!onceMoved)
+        {
+            if (moveInput.y.Equals(0f))
+                return;
+            else if (moveInput.y > 0f)
+                onceMoved = true;
+        }
+
         if (oilCrash)
         {
             moveInput = Vector2.zero;
@@ -221,7 +244,7 @@ public class PlayerController : RacerControllerBase
 
         HandleAcceleration(moveInput);
 
-        HandleMovement();
+        HandleMovement(moveInput);
 
         HandleRotation(moveInput);
 
@@ -254,7 +277,7 @@ public class PlayerController : RacerControllerBase
         finalSpeed = currentSpeed;
     }
 
-    private void HandleMovement()
+    private void HandleMovement(Vector2 moveInput)
     {
         transform.position += finalSpeed * Time.deltaTime * transform.forward;
 
@@ -469,38 +492,47 @@ public class PlayerController : RacerControllerBase
         if (registeredRaceComplete)
             return;
 
-        if (GetPlayerSplinePercent() < currentRaceCompletePercent)
-            return;
+        double currentPercent = GetPlayerSplinePercent();
 
-        registeredRaceComplete = true;
+        if (previousSplinePercent > 0.9 && currentPercent < 0.1)
+        {
+            completedLaps++;
+            UIManager.Instance.UpdateLapText(completedLaps, totalLaps);
 
-        GameManager.Instance.RaceCompletedRegister(RacerID);
+            if (completedLaps >= totalLaps)
+            {
+                registeredRaceComplete = true;
+
+                GameManager.Instance.RaceCompletedRegister(RacerID);
+            }
+        }
+
+        previousSplinePercent = currentPercent;
     }
 
     private void UpdateRaceProgress()
     {
         float raceProgress = GetRaceProgress();
+
         UIManager.Instance.UpdateProgressText((int)raceProgress);
     }
 
     private float GetRaceProgress()
     {
-        SplineSample sample = new();
+        double currentPercent = GetPlayerSplinePercent();
 
-        spline.Project(transform.position, ref sample);
+        float overallProgress = (completedLaps + (float)currentPercent) / totalLaps;
 
-        float currentPercent = (float)sample.percent * 100f;
-
-        return Mathf.Clamp01(currentPercent / currentRaceCompletePercent) * 100f;
+        return Mathf.Clamp01(overallProgress) * 100f;
     }
 
-    private float GetPlayerSplinePercent()
+    private double GetPlayerSplinePercent()
     {
         SplineSample sample = new();
 
         spline.Project(transform.position, ref sample);
 
-        return (float)sample.percent * 100f;
+        return sample.percent;
     }
 
     private bool IsMovingOppositeDirection()
@@ -554,6 +586,9 @@ public class PlayerController : RacerControllerBase
         targetLean = 0f;
 
         finalSpeed = 0f;
+        completedLaps = 0;
+
+        previousSplinePercent = GetPlayerSplinePercent();
 
         maxSpeed = actualMaxSpeed;
         decelerationRate = actualDecelerationRate;
@@ -572,6 +607,9 @@ public class PlayerController : RacerControllerBase
         UpdateSplineYaw();
 
         UpdateState(PlayerState.Idle);
+
+        UIManager.Instance.UpdateScoreText(0);
+        UIManager.Instance.UpdateProgressText(0);
     }
     #endregion
 

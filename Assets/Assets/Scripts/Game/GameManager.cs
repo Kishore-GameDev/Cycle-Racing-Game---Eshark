@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using K;
+using NUnit.Framework;
 using UnityEngine;
 
 public enum GameState
@@ -12,7 +13,8 @@ public enum GameState
 
 public class GameManager : MonoBehaviour
 {
-    public static Action<float> StartRace;
+    public static Action<int> CountDownStarted;
+    public static Action StartRace;
     public static Action<bool> StopRace;
     public static Action ResetAll;
 
@@ -33,6 +35,7 @@ public class GameManager : MonoBehaviour
     private float raceStartedTimeSecond;
 
     private const int totalRacers = 4;
+    private int totalLaps = 1;
 
     private void Awake()
     {
@@ -54,13 +57,18 @@ public class GameManager : MonoBehaviour
     #endregion
 
     #region Race
+    public void CountDownStarts()
+    {
+        CountDownStarted?.Invoke(totalLaps);
+    }
+
     public void CountDownDoneStartRace()
     {
         raceStartedTimeSecond = Time.time;
 
         ResetRaceData();
 
-        StartRace?.Invoke(UIManager.Instance.GetRaceCompletionPercentage());
+        StartRace?.Invoke();
     }
 
     private void ResetRaceData()
@@ -76,7 +84,8 @@ public class GameManager : MonoBehaviour
 
         if (racerID == RacerID.Player)
         {
-            StopRace?.Invoke(DidAnyoneWonRace());
+            bool isPlayerWon = raceCompletedRegistered.Count == 1;
+            StopRace?.Invoke(isPlayerWon);
         }
 
         CheckFinalizeRace();
@@ -142,7 +151,7 @@ public class GameManager : MonoBehaviour
         return raceCompletedRegistered.Count == 0;
     }
 
-    public string GetFormattedTime()
+    private string GetFormattedTime()
     {
         TimeSpan time = TimeSpan.FromSeconds(Time.time - raceStartedTimeSecond);
 
@@ -152,6 +161,11 @@ public class GameManager : MonoBehaviour
             time.Minutes,
             time.Seconds
         );
+    }
+
+    public void SetTotalLaps(int lapCount)
+    {
+        totalLaps = lapCount;
     }
     #endregion
 

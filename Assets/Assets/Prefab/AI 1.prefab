@@ -177,7 +177,7 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     size: 1
     percent: 0.005678603610112097
-  wrapMode: 0
+  wrapMode: 1
   followMode: 0
   autoStartPosition: 0
   _follow: 1

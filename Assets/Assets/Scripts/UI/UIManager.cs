@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 public enum UIState
 {
+    None,
     Menu,
     Racing,
     Pause,
@@ -20,6 +21,7 @@ public class UIManager : MonoBehaviour
 
     [Header("Gameplay UI")]
     [SerializeField] private TextMeshProUGUI scoreText;
+    [SerializeField] private TextMeshProUGUI lapText;
     [SerializeField] private TextMeshProUGUI progressText;
     [SerializeField] private GameObject wrongDirectionObject;
     [SerializeField] private TextMeshProUGUI crashedText;
@@ -39,9 +41,9 @@ public class UIManager : MonoBehaviour
     [Header("Score Card")]
     [SerializeField] private List<SingleRankScoreData> singleRankScoreDataList;
 
-    [Header("Race Completion")]
-    [SerializeField] private TextMeshProUGUI raceCompletionPercentageText;
-    [SerializeField] private Slider raceCompletionPercentageSlider;
+    // [Header("Race Completion")]
+    // [SerializeField] private TextMeshProUGUI raceCompletionPercentageText;
+    // [SerializeField] private Slider raceCompletionPercentageSlider;
 
     private Coroutine crashedTextRoutine;
     private Coroutine slowedTextRoutine;
@@ -64,11 +66,13 @@ public class UIManager : MonoBehaviour
     #region Events
     private void SubscribeEvents()
     {
+        GameManager.ResetAll += ResetUIEffects;
         GameManager.StopRace += StopRace;
     }
 
     private void UnsubscribeEvents()
     {
+        GameManager.ResetAll -= ResetUIEffects;
         GameManager.StopRace -= StopRace;
     }
 
@@ -96,14 +100,33 @@ public class UIManager : MonoBehaviour
 
     public void ActivateScoreCardUI(List<SingleRankScoreDatas> singleRankScoreDatas)
     {
-        SetActivePanel(UIState.ScoreCard);
-
         for (int i = 0; i < singleRankScoreDatas.Count; i++)
         {
             SingleRankScoreDatas data = singleRankScoreDatas[i];
 
             singleRankScoreDataList[i].SetData(data.name, data.time, data.score);
         }
+
+        Debug.Log("Name: " + singleRankScoreDataList[0].Name);
+        if (singleRankScoreDataList[0].Name.Equals(RacerID.Player.ToString()))
+        {
+            Debug.Log("Name: If");
+            StartCoroutine(ActivateScoreCardUIWithDelay());
+        }
+        else
+        {
+            Debug.Log("Name: Else");
+            SetActivePanel(UIState.ScoreCard);
+        }
+    }
+
+    private IEnumerator ActivateScoreCardUIWithDelay()
+    {
+        SetActivePanel(UIState.None);
+                
+        yield return new WaitForSeconds(2f);
+
+        SetActivePanel(UIState.ScoreCard);
     }
 
     private void SetActivePanel(UIState uiState)
@@ -129,9 +152,14 @@ public class UIManager : MonoBehaviour
         scoreText.text = $"Score: {score}";
     }
 
+    public void UpdateLapText(int lapCount, int totalLaps)
+    {
+        lapText.text = $"Lap: {lapCount}/{totalLaps}";
+    }
+
     public void UpdateProgressText(int progress)
     {
-        progressText.text = $"{progress}% to Complete";
+        progressText.text = $"{progress}% Progress";
     }
     #endregion
 
@@ -210,6 +238,7 @@ public class UIManager : MonoBehaviour
     #region Countdown
     private IEnumerator StartCountDown()
     {
+        GameManager.Instance.CountDownStarts();
         countdownText.gameObject.SetActive(true);
 
         countdownText.text = "Ready";
@@ -235,16 +264,16 @@ public class UIManager : MonoBehaviour
     #endregion
 
     #region Race Completion
-    public void RaceCompleteionPercentageSliderValueChange()
-    {
-        raceCompletionPercentageText.text =
-            raceCompletionPercentageSlider.value.ToString();
-    }
+    // public void RaceCompleteionPercentageSliderValueChange()
+    // {
+    //     raceCompletionPercentageText.text =
+    //         raceCompletionPercentageSlider.value.ToString();
+    // }
 
-    public int GetRaceCompletionPercentage()
-    {
-        return (int)raceCompletionPercentageSlider.value;
-    }
+    // public int GetRaceCompletionPercentage()
+    // {
+    //     return (int)raceCompletionPercentageSlider.value;
+    // }
     #endregion
 
     #region Buttons
@@ -254,8 +283,7 @@ public class UIManager : MonoBehaviour
 
         StopRoutine(ref countdownRoutine);
 
-        countdownRoutine =
-            StartCoroutine(StartCountDown());
+        countdownRoutine = StartCoroutine(StartCountDown());
     }
 
     public void ButtonExit()
@@ -294,8 +322,7 @@ public class UIManager : MonoBehaviour
 
         StopRoutine(ref countdownRoutine);
 
-        countdownRoutine =
-            StartCoroutine(StartCountDown());
+        countdownRoutine = StartCoroutine(StartCountDown());
     }
 
     public void ButtonMenuFromPauseUI()

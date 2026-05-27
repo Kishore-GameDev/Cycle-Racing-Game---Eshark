@@ -7,8 +7,13 @@ public class SingleRankScoreData : MonoBehaviour
     [SerializeField] private TextMeshProUGUI timeText;
     [SerializeField] private TextMeshProUGUI scoreText;
 
+    private string _name;
+
+    public string Name => _name;
+
     public void SetData(string name, string time, string score)
     {
+        _name = name;
         nameText.text = name;
         timeText.text = time;
         scoreText.text = score;

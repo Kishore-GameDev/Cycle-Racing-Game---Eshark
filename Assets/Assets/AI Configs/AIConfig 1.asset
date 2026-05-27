@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e711cf083b0d88240a82cdd3b43e6342, type: 3}
   m_Name: AIConfig 1
   m_EditorClassIdentifier: Assembly-CSharp::AIConfig
-  maxSpeed: 50
+  maxSpeed: 60
   acceleration: 18
   aIObstacleIntelligence: 0
   startLane: 1

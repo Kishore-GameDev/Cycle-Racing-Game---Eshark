@@ -50,7 +50,9 @@ public class AIController : RacerControllerBase
     private float acceleration;
     private Vector3 previousPosition;
 
-    private float currentRaceCompletePercent;
+    private double previousSplinePercent;
+    private int completedLaps;
+    private int totalLaps;
 
     private const float laneSwitchSpeed = 18f;
 
@@ -85,8 +87,7 @@ public class AIController : RacerControllerBase
         maxSpeed = aIConfig.maxSpeed;
         acceleration = aIConfig.acceleration;
 
-        splineFollower.motion.offset =
-            new Vector2(CurrentLaneOffset, 0f);
+        splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
 
         splineFollower.followSpeed = 0f;
 
@@ -99,6 +100,7 @@ public class AIController : RacerControllerBase
     #region Events
     private void SubscribeEvents()
     {
+        GameManager.CountDownStarted += CountDownStarted;
         GameManager.StartRace += StartRace;
         GameManager.StopRace += StopRace;
         GameManager.ResetAll += ResetAll;
@@ -106,6 +108,7 @@ public class AIController : RacerControllerBase
 
     private void UnsubscribeEvents()
     {
+        GameManager.CountDownStarted -= CountDownStarted;
         GameManager.StartRace -= StartRace;
         GameManager.StopRace -= StopRace;
         GameManager.ResetAll -= ResetAll;
@@ -113,13 +116,19 @@ public class AIController : RacerControllerBase
     #endregion
 
     #region Race
-    private void StartRace(float raceCompletePercent)
+    private void CountDownStarted(int totalLapCount)
+    {
+        completedLaps = 0;
+        totalLaps = totalLapCount;
+    }
+
+    private void StartRace()
     {
         alreadyStoppedRace = false;
 
         registeredRaceComplete = false;
 
-        currentRaceCompletePercent = raceCompletePercent;
+        previousSplinePercent = splineFollower.result.percent;
 
         UpdateState(AIState.Move);
     }
@@ -150,26 +159,37 @@ public class AIController : RacerControllerBase
         if (registeredRaceComplete)
             return;
 
-        if (GetCurrentCompletedPercentage() < currentRaceCompletePercent)
-            return;
+        double currentPercent = splineFollower.result.percent;
 
-        registeredRaceComplete = true;
-
-        bool isFirst = GameManager.Instance.DidAnyoneWonRace();
-
-        GameManager.Instance.RaceCompletedRegister(RacerID);
-
-        StopRace(false);
-
-        if (isFirst)
+        if (previousSplinePercent > 0.9 && currentPercent < 0.1)
         {
-            UpdateState(AIState.Won);
+            completedLaps++;
+
+            if (completedLaps >= totalLaps)
+            {
+                registeredRaceComplete = true;
+
+                bool isFirst = GameManager.Instance.DidAnyoneWonRace();
+
+                GameManager.Instance.RaceCompletedRegister(RacerID);
+
+                StopRace(false);
+
+                if (isFirst)
+                {
+                    UpdateState(AIState.Won);
+                }
+            }
         }
+
+        previousSplinePercent = currentPercent;
     }
 
     private double GetCurrentCompletedPercentage()
     {
-        return splineFollower.result.percent * 100f;
+        double overallProgress = (completedLaps + splineFollower.result.percent) / totalLaps;
+
+        return overallProgress * 100f;
     }
     #endregion
 
@@ -434,6 +454,7 @@ public class AIController : RacerControllerBase
         ResetCoroutines();
 
         currentSpeed = 0f;
+        completedLaps = 0;
 
         alreadyStoppedRace = false;
         registeredRaceComplete = true;
@@ -442,6 +463,7 @@ public class AIController : RacerControllerBase
         scoreBoosterActive = false;
 
         currentLane = aIConfig.startLane;
+        previousSplinePercent = splineFollower.result.percent;
 
         maxSpeed = aIConfig.maxSpeed;
         acceleration = aIConfig.acceleration;
