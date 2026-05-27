@@ -537,12 +537,8 @@ public class AIController : RacerControllerBase
         maxSpeed = aIConfig.maxSpeed;
         acceleration = aIConfig.acceleration;
 
-        //splineFollower.RebuildImmediate();
         splineFollower.Evaluate(0f);
 
-        if (RacerID == RacerID.AI2)
-            Debug.Log($"Lane {currentLane}, Offset {CurrentLaneOffset}");
-        
         splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
         splineFollower.followSpeed = 0f;
 
