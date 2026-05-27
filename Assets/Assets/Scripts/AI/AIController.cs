@@ -97,10 +97,6 @@ public class AIController : RacerControllerBase
         maxSpeed = aIConfig.maxSpeed;
         acceleration = aIConfig.acceleration;
 
-        splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
-
-        splineFollower.followSpeed = 0f;
-
         currentSpeed = 0f;
         previousPosition = transform.position;
 
@@ -391,8 +387,7 @@ public class AIController : RacerControllerBase
         if (aiState == AIState.Won)
             return;
 
-        AIObstacleIntelligence intelligence =
-            aIConfig.aIObstacleIntelligence;
+        AIObstacleIntelligence intelligence = aIConfig.aIObstacleIntelligence;
 
         if (intelligence == AIObstacleIntelligence.Confused)
         {
@@ -538,20 +533,22 @@ public class AIController : RacerControllerBase
         scoreBoosterActive = false;
 
         currentLane = aIConfig.startLane;
-        previousSplinePercent = splineFollower.result.percent;
 
         maxSpeed = aIConfig.maxSpeed;
         acceleration = aIConfig.acceleration;
 
-        splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
+        //splineFollower.RebuildImmediate();
+        splineFollower.Evaluate(0f);
 
+        if (RacerID == RacerID.AI2)
+            Debug.Log($"Lane {currentLane}, Offset {CurrentLaneOffset}");
+        
+        splineFollower.motion.offset = new Vector2(CurrentLaneOffset, 0f);
         splineFollower.followSpeed = 0f;
 
         splineFollower.SetDistance(startDistance);
+        previousSplinePercent = splineFollower.result.percent;
 
-        splineFollower.RebuildImmediate();
-
-        splineFollower.Evaluate(0f);
         previousPosition = transform.position;
 
         UpdateState(AIState.Idle);

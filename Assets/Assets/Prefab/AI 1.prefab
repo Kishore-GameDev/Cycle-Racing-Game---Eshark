@@ -210,11 +210,10 @@ MonoBehaviour:
   racerID: 0
   animationController: {fileID: 8483471893155563528}
   splineFollower: {fileID: 3654730752966005418}
-  aIConfig: {fileID: 11400000, guid: 646b8d41262b36043bc0832ec3ab84eb, type: 2}
+  aIConfig: {fileID: 0}
   startDistance: 0
   maxLeanAngle: 25
   leanSmoothSpeed: 5
-  visualTransform: {fileID: 7225134488857036126}
   leanPivot: {fileID: 8723780758451899524}
   testAIState: 0
 --- !u!1 &2975852929784620077

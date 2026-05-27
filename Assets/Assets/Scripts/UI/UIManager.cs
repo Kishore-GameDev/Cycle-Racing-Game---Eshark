@@ -107,15 +107,12 @@ public class UIManager : MonoBehaviour
             singleRankScoreDataList[i].SetData(data.name, data.time, data.score);
         }
 
-        Debug.Log("Name: " + singleRankScoreDataList[0].Name);
         if (singleRankScoreDataList[0].Name.Equals(RacerID.Player.ToString()))
         {
-            Debug.Log("Name: If");
             StartCoroutine(ActivateScoreCardUIWithDelay());
         }
         else
         {
-            Debug.Log("Name: Else");
             SetActivePanel(UIState.ScoreCard);
         }
     }
