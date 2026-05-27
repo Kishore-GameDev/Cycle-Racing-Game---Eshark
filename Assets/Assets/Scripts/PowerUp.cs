@@ -37,7 +37,7 @@ public class PowerUp : MonoBehaviour
 
     private IEnumerator EnableAfterSeconds()
     {
-        yield return new WaitForSeconds(10f);
+        yield return new WaitForSeconds(3f);
         SetActive(true);
     }
 
