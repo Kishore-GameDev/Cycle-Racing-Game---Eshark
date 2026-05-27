@@ -32,7 +32,7 @@ public class AIController : RacerControllerBase
     [SerializeField] private float startDistance;
 
 
-    private readonly MinMax laneOffset = new(-3.5f, 3.5f);
+    private readonly MinMax laneOffset = new(-3f, 3f);
 
     private AIState aiState;
 
